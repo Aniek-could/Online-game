@@ -1,0 +1,43 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Build and IDE files
+.vs/
+.vscode/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.DotSettings.user
+
+# Unreal project files generated locally
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
+Makefile
+
+# Logs and crash reports
+*.log
+crashinfo-*
+
+# Packaged/cooked output
+Build/
+Releases/
+StagedBuilds/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Unreal autosaves and local metadata
+*_BuiltData.uasset
+*.tmp

@@ -1,0 +1,13 @@
+# Keep text files normalized in the repository.
+* text=auto
+
+# Unreal assets and other binary files must not be diffed or merged as text.
+*.uasset binary
+*.umap binary
+*.ubulk binary
+*.uexp binary
+*.pak binary
+*.pdb binary
+*.dll binary
+*.lib binary
+*.exe binary
