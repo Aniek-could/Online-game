@@ -25,7 +25,17 @@ APickupBase::APickupBase()
 
 void APickupBase::InitializePickup()
 {
-	if (PickupDataTable&& !PickupItemID.IsNone())
+	if (PickupDataTable.IsNull()&& PickupItemID.IsNone()) return;
+	
+	UDataTable*Table=PickupDataTable.LoadSynchronous();
+	if (!Table)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to load pickup data table: %s"),
+		 *PickupDataTable.ToString());
+		
+		return;
+	}
+	
 	{
 		const FItemData*ItemDataRow=PickupDataTable->FindRow<FItemData>(PickupItemID,PickupItemID.ToString());
 		if (!ItemDataRow||!ItemDataRow->ItemBase) return ;
