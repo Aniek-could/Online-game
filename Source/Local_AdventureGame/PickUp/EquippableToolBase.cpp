@@ -7,10 +7,14 @@
 AEquippableToolBase::AEquippableToolBase()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
+	bReplicates=true;
+	SetReplicateMovement(false);
 
 	ToolMeshComponent=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ToolMesh"));
 	check(ToolMeshComponent!=nullptr);
+	
+	RootComponent= ToolMeshComponent;
 }
 
 void AEquippableToolBase::Use()

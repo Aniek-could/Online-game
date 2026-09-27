@@ -16,6 +16,9 @@
 #include "Data/EquippableToolDefinition.h"
 #include "Public/PickUp/InventoryComponent.h"
 #include "Data/ItemData.h"
+#include "Logging/LogMacros.h"
+#include "Net/UnrealNetwork.h"
+#include "Engine/Engine.h"
 #include "AdventureCharacter.generated.h"
 
 
@@ -29,13 +32,7 @@ UCLASS()
 class LOCAL_ADVENTUREGAME_API AAdventureCharacter : public ACharacter
 {
 	GENERATED_BODY()
-
-public:
-	// Sets default values for this character's properties
-	AAdventureCharacter();
 	
-	virtual void BeginPlay() override;
-
 protected:
 	
 	// 输入
@@ -54,27 +51,48 @@ protected:
 	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category=Input)
 	TObjectPtr<UInputAction>UseAction;
 	
+protected://动画
+	
 	//人物idle动画
 	UPROPERTY(EditAnywhere,Category=Animation)
 	UAnimBlueprint*FirstPersonDefaultAnim;
 	
+protected://装备
+	
 	//装备物品
 	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Tools")
 	TObjectPtr<AEquippableToolBase>EquippedTool;
+	
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentTool)
+	TObjectPtr<AEquippableToolBase>CurrentTool=nullptr;
+	
+	UFUNCTION()
+	void OnRep_CurrentTool();
+	
+	void ApplyCurrentTool();
 
-public:	
+public:
+	// Sets default values for this character's properties
+	AAdventureCharacter();
+	
+	virtual void BeginPlay() override;
+	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+	
+public://动作
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
+	
 	//输入绑定动作
 	UFUNCTION()
 	void Move(const FInputActionValue& Value);
 	
 	UFUNCTION()
 	void Look(const FInputActionValue& Value);
+	
+public://摄像机和人物
 	
 	//摄像机
 	UPROPERTY(VisibleAnywhere,Category=Camera)
@@ -93,8 +111,14 @@ public:
 	UPROPERTY(VisibleAnywhere,Category=Mesh)
 	USkeletalMeshComponent* FirstPersonMeshComponent ;
 	
+	//获取摄像机
+	UFUNCTION()
+	FVector GetCameraTargetLocation();
+	
+public://装备
+	
 	//角色已有的物品栏组件
-	UPROPERTY(VisibleAnywhere,Category="Inventory")
+	UPROPERTY(Replicated)
 	TObjectPtr<UInventoryComponent>InventoryComponent;
 	
 	//检查是否已经装备该工具
@@ -103,14 +127,16 @@ public:
 	
 	//装备
 	UFUNCTION()
-	void AttachTool(UEquippableToolDefinition*ToolDefinition);
+	bool AttachTool(UEquippableToolDefinition*ToolDefinition);
 	
 	//其他类尝试向玩家授予物品时
 	UFUNCTION()
-	void GiveItem(UItemDefinition*ItemDefinition);
+	bool GiveItem(UItemDefinition*ItemDefinition);
 	
-	//获取摄像机
-	UFUNCTION()
-	FVector GetCameraTargetLocation();
+public://复制
+	
+	//复制前提
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+
 	
 };

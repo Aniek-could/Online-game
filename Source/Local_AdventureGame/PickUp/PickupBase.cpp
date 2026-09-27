@@ -8,7 +8,9 @@
 APickupBase::APickupBase()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	bReplicates=true;
+	SetReplicateMovement(false);
+	PrimaryActorTick.bCanEverTick = false;
 	
 	PickupMeshComponent=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PickupMesh"));
 	check(PickupMeshComponent!=nullptr);
@@ -17,6 +19,8 @@ APickupBase::APickupBase()
 	check(SphereComponent!=nullptr);
 	SphereComponent->SetupAttachment(PickupMeshComponent);
 	SphereComponent->SetSphereRadius(32.f);
+	
+	PickupMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
 
 void APickupBase::InitializePickup()
@@ -24,6 +28,7 @@ void APickupBase::InitializePickup()
 	if (PickupDataTable&& !PickupItemID.IsNone())
 	{
 		const FItemData*ItemDataRow=PickupDataTable->FindRow<FItemData>(PickupItemID,PickupItemID.ToString());
+		if (!ItemDataRow||!ItemDataRow->ItemBase) return ;
 		
 		UItemDefinition*TempItemDefinition=ItemDataRow->ItemBase.Get();
 		
@@ -40,12 +45,15 @@ void APickupBase::InitializePickup()
 			GEngine->AddOnScreenDebugMessage(-1,5.0f,FColor::Black,TEXT("未生成网格体"));
 		}
 		
-		PickupMeshComponent->SetVisibility(true);
-		SphereComponent->SetVisibility(true);
-		SphereComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		//服务器绑定
+		if (HasAuthority())
+		{
+			//防止多次绑定
+			SphereComponent->OnComponentBeginOverlap.RemoveDynamic(this,&APickupBase::OnSphereBeginOverlap);
+			SphereComponent->OnComponentBeginOverlap.AddDynamic(this,&APickupBase::OnSphereBeginOverlap);
+		}
 		
-		//绑定
-		SphereComponent->OnComponentBeginOverlap.AddDynamic(this,&APickupBase::OnSphereBeginOverlap);
+		ApplyPickupState();
 	}
 		
 }
@@ -58,25 +66,30 @@ void APickupBase::BeginPlay()
 	InitializePickup();
 }
 
-void APickupBase::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-	UPrimitiveComponent* OtherComp, int32 OtherBoxIndex, bool bFromSweep, const FHitResult& SweepResult)
+void APickupBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	GEngine->AddOnScreenDebugMessage(-1,5.0f,FColor::Black,TEXT("Attempting a pickup collision"));
+	GetWorldTimerManager().ClearTimer(RespawnTimerHandle);
+	Super::EndPlay(EndPlayReason);
+}
+
+void APickupBase::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+                                       UPrimitiveComponent* OtherComp, int32 OtherBoxIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!HasAuthority()) return;
+	if (!bPickupAvailable) return;
     
 	AAdventureCharacter*Character=Cast<AAdventureCharacter>(OtherActor);
-	if (Character!=nullptr)
+	if (!IsValid(Character)||!IsValid(ReferenceItem)) return;
+		
+	if (Character->GiveItem(ReferenceItem))
 	{
-		Character->GiveItem(ReferenceItem);
-		
-		SphereComponent->OnComponentBeginOverlap.RemoveAll(this);
-		
-		PickupMeshComponent->SetVisibility(false);
-		PickupMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		SphereComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		bPickupAvailable=false;
+		ApplyPickupState();
+		ForceNetUpdate();
 		
 		if (bShouldReSpawn)
 		{
-			GetWorldTimerManager().SetTimer(RespawnTimerHandle,this,&APickupBase::InitializePickup,ReSpawnTime,false,ReSpawnTime);
+			GetWorldTimerManager().SetTimer(RespawnTimerHandle,this,&APickupBase::RespawnPickup,ReSpawnTime,false);
 		}
 	}
 }
@@ -106,4 +119,39 @@ void APickupBase::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 }
+
+void APickupBase::OnRep_PickupAvailable()
+{
+	ApplyPickupState();
+}
+
+void APickupBase::ApplyPickupState()
+{
+	if (!IsValid(PickupMeshComponent)||!IsValid(SphereComponent)) return;
+	
+	//根据 bPickupAvailable 的值控制 PickupMeshComponent 的显示/隐藏
+	//Propagate to Children — 是否传播到子组件
+	PickupMeshComponent->SetVisibility(bPickupAvailable,true);
+	SphereComponent->SetVisibility(bPickupAvailable,true);
+	SphereComponent->SetCollisionEnabled(bPickupAvailable?ECollisionEnabled::QueryOnly:ECollisionEnabled::NoCollision);
+}
+
+void APickupBase::RespawnPickup()
+{
+	if (!HasAuthority()) return;
+	
+	bPickupAvailable=true;
+	//服务器本身不会触发自己的 OnRep_bPickupAvailable()。不调用 ApplyPickupState()，监听服务器上的拾取物可能仍然不可见或没有碰撞。
+	ApplyPickupState();
+	//强制引擎在下一帧立即同步该 Actor 的所有复制属性，跳过正常的网络更新间隔等待。
+	ForceNetUpdate();
+}
+
+void APickupBase::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(APickupBase,bPickupAvailable);
+}
+
+
 

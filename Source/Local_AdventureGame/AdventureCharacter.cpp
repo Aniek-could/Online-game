@@ -3,9 +3,76 @@
 
 #include "AdventureCharacter.h"
 
+void AAdventureCharacter::OnRep_CurrentTool()
+{
+	ApplyCurrentTool();
+}
+
+void AAdventureCharacter::ApplyCurrentTool()
+{
+	if (!IsValid(CurrentTool))
+	{
+		EquippedTool = nullptr;
+		return;
+	}
+	
+	CurrentTool->OwningCharacter = this;
+	EquippedTool = CurrentTool;
+
+	//虚幻引擎会将两个物体接合在一起，以便它们在移动时作为一个整体交互。
+	FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, false);
+	
+	//是否是本地玩家控制的Pawn
+	USkeletalMeshComponent*AttachMesh=IsLocallyControlled()?FirstPersonMeshComponent:GetMesh();
+	
+	if (AttachMesh)
+	{
+		//AttachToComponent用于将Actor的根骨骼组件附加到目标组件
+		CurrentTool->AttachToComponent(AttachMesh,AttachmentRules,FName(TEXT("HandGrip_R")));
+	}
+	
+	if (IsLocallyControlled() &&
+	  CurrentTool->FirstPersonToolAnim &&
+	  CurrentTool->FirstPersonToolAnim->GeneratedClass)
+	{
+		FirstPersonMeshComponent->SetAnimInstanceClass(
+			CurrentTool->FirstPersonToolAnim->GeneratedClass
+		);
+	}
+
+	if (CurrentTool->ThirdPersonToolAnim &&
+	  CurrentTool->ThirdPersonToolAnim->GeneratedClass)
+	{
+		GetMesh()->SetAnimInstanceClass(
+			CurrentTool->ThirdPersonToolAnim->GeneratedClass
+		);
+	}
+	
+	//本地输入的玩家
+	if (IsLocallyControlled())
+	{
+		if (APlayerController*PlayerController=Cast<APlayerController>(Controller))
+		{
+			if (UEnhancedInputLocalPlayerSubsystem*Subsystem=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+			{
+				//优先级数值越大，优先级越高。
+				Subsystem ->AddMappingContext(CurrentTool->ToolMappingContext,1);
+			}
+			if (UseAction)
+			{
+				CurrentTool->BindInputAction(UseAction);
+			}
+		}
+	}
+}
+
 // Sets default values
 AAdventureCharacter::AAdventureCharacter()
 {
+	
+	 bReplicates = true;
+	 SetReplicateMovement(true);
+	
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it
     	PrimaryActorTick.bCanEverTick = true;
      
@@ -54,24 +121,29 @@ void AAdventureCharacter::BeginPlay()
 	Super::BeginPlay();
 	
 	check(GEngine!=nullptr);
-	
-	if (APlayerController*PlayerController=Cast<APlayerController>(Controller))
+	if (IsLocallyControlled())
 	{
-		if (UEnhancedInputLocalPlayerSubsystem*Subsystem=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		if (APlayerController*PlayerController=Cast<APlayerController>(Controller))
 		{
-			Subsystem ->AddMappingContext(FirstPersonContext,0);
+			if (UEnhancedInputLocalPlayerSubsystem*Subsystem=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+			{
+				Subsystem ->AddMappingContext(FirstPersonContext,0);
+			}
 		}
 	}
-	
-	GEngine->AddOnScreenDebugMessage(-1,5.0f,FColor::Red,TEXT("We are using AdventureCharacter."));
 
 	// Only the owning player sees the first person mesh.
 	FirstPersonMeshComponent->SetOnlyOwnerSee(true);
 	GetMesh()->SetOwnerNoSee(true); 
-
-	// Set the animations on the first person mesh.
-	FirstPersonMeshComponent->SetAnimInstanceClass(FirstPersonDefaultAnim->GeneratedClass);
 	
+	if (IsLocallyControlled() &&
+	  FirstPersonDefaultAnim &&
+	  FirstPersonDefaultAnim->GeneratedClass)
+	{
+		FirstPersonMeshComponent->SetAnimInstanceClass(
+			FirstPersonDefaultAnim->GeneratedClass
+		);
+	}
 }
 
 // Called every frame
@@ -123,7 +195,7 @@ bool AAdventureCharacter::IsToolAlreadyOwned(UEquippableToolDefinition* ToolDefi
 {
 	for (UEquippableToolDefinition*InvenytoryItem : InventoryComponent->ToolInventory)
 	{
-		if (ToolDefinition->ID==ToolDefinition->ID)
+		if (ToolDefinition->ID==InvenytoryItem->ID)
 		{
 			return true;
 		}
@@ -131,43 +203,37 @@ bool AAdventureCharacter::IsToolAlreadyOwned(UEquippableToolDefinition* ToolDefi
 	return false;
 }
 
-void AAdventureCharacter::AttachTool(UEquippableToolDefinition* ToolDefinition)
+bool AAdventureCharacter::AttachTool(UEquippableToolDefinition* ToolDefinition)
 {
-	if (not IsToolAlreadyOwned(ToolDefinition))
-	{
+	if (!HasAuthority()) return false;
+	if (!IsValid(ToolDefinition)||!ToolDefinition->ToolAsset) return false;
+	
+	if (IsToolAlreadyOwned(ToolDefinition)) return false;
+	
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		
 		//生成Actor
-		AEquippableToolBase*ToolToEquip=GetWorld()->SpawnActor<AEquippableToolBase>(ToolDefinition->ToolAsset,this->GetActorTransform());
+		AEquippableToolBase*ToolToEquip=GetWorld()->SpawnActor<AEquippableToolBase>(ToolDefinition->ToolAsset,this->GetActorTransform(),SpawnParams);
 		
-		//虚幻引擎会将两个物体接合在一起，以便它们在移动时作为一个整体交互。
-		FAttachmentTransformRules AttachmentRules(EAttachmentRule::SnapToTarget, true);
-		//AttachToActor用于将一个Actor附加到目标父级Actor
-		ToolToEquip->AttachToActor(this,AttachmentRules);
-		//AttachToComponent用于将Actor的根骨骼组件附加到目标组件
-		//MyActor->AttachToActor(ParentActor, AttachmentRules, OptionalSocketName)
-		ToolToEquip->AttachToComponent(FirstPersonMeshComponent,AttachmentRules,FName(TEXT("HandGrip_R")));
-	
-		FirstPersonMeshComponent->SetAnimInstanceClass(ToolToEquip->FirstPersonToolAnim->GeneratedClass);
-		GetMesh()->SetAnimInstanceClass(ToolToEquip->ThirdPersonToolAnim->GeneratedClass);
-	
+		if (!ToolToEquip) return false;
+		
 		InventoryComponent->ToolInventory.Add(ToolDefinition);
-		ToolToEquip->OwningCharacter=this;
 		
-		EquippedTool=ToolToEquip;
+		CurrentTool=ToolToEquip;
+		ApplyCurrentTool();
 		
-		if (APlayerController*PlayerController=Cast<APlayerController>(Controller))
-		{
-			if (UEnhancedInputLocalPlayerSubsystem*Subsystem=ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-			{
-				//优先级数值越大，优先级越高。
-				Subsystem ->AddMappingContext(ToolToEquip->ToolMappingContext,1);
-			}
-			ToolToEquip->BindInputAction(UseAction);
-		}
-	}
+		ForceNetUpdate();
+	return true;
 }
 
-void AAdventureCharacter::GiveItem(UItemDefinition* ItemDefinition)
+bool AAdventureCharacter::GiveItem(UItemDefinition* ItemDefinition)
 {
+	if (!HasAuthority()||!IsValid(ItemDefinition)) return false;
+	
 	switch (ItemDefinition->ItemType)
 	{
 	case EItemType::Tool:
@@ -175,17 +241,19 @@ void AAdventureCharacter::GiveItem(UItemDefinition* ItemDefinition)
 			UEquippableToolDefinition*ToolDefinition=Cast<UEquippableToolDefinition>(ItemDefinition);
 			if (ToolDefinition!=nullptr)
 			{
-				AttachTool(ToolDefinition);
+				return AttachTool(ToolDefinition);
 			}
 			break;
 		}
 	case EItemType::Consumable:
 		{
+			return false;
 			break;
 		}
 	default:
 		break;
 	}
+	return true;
 }
 
 FVector AAdventureCharacter::GetCameraTargetLocation()
@@ -209,5 +277,13 @@ FVector AAdventureCharacter::GetCameraTargetLocation()
 	}
 	
 	return TargetPosition;
+}
+
+void AAdventureCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	
+	DOREPLIFETIME(AAdventureCharacter,CurrentTool);
+	DOREPLIFETIME(AAdventureCharacter,InventoryComponent);
 }
 

@@ -18,8 +18,10 @@ public:
 	// Sets default values for this component's properties
 	UInventoryComponent();
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="Tools")
+	UPROPERTY(Replicated)
 	TArray<UEquippableToolDefinition*>ToolInventory;
+	
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
 	// Called when the game starts

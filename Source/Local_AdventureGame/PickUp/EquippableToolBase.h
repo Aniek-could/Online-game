@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Net/UnrealNetwork.h"
 #include "EquippableToolBase.generated.h"
 
 class AAdventureCharacter;

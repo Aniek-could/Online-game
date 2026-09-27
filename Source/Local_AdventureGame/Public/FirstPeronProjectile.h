@@ -19,7 +19,13 @@ public:
 	AFirstPeronProjectile();
 	
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Projectile | Physics")
-	float PhysicsForce=100.f;
+	float PhysicsForce=20.f;
+	
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Projectile | Physics")
+	float CharacterKnockSpeed=300.f;
+	
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Projectile | Physics")
+	float CharacterKnockbackUpward=150.f;
 	
 	//HitComp：被击中的组件;OtherActor：被击中的Actor;OtherComp：造成碰撞的组件（在本例中为发射物的碰撞组件）
 	//NormalImpulse：碰撞的法线冲量;Hit：一个FHitResult引用，包含有关碰撞事件的更多数据，如时间、距离和位置

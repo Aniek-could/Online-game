@@ -10,7 +10,7 @@
  * 
  */
 UCLASS()
-class LOCAL_ADVENTUREGAME_API AFoamDart : public AFirstPeronProjectile
+class LOCAL_ADVENTUREGAME_API AFoamDart : public AFirstPeronProjectile//飞镖子类
 {
 	GENERATED_BODY()
 	

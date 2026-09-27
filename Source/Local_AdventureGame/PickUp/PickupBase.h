@@ -6,10 +6,12 @@
 #include "GameFramework/Actor.h"
 #include "Components/SphereComponent.h"
 #include "AdventureCharacter.h"
+#include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "PickupBase.generated.h"
 
 class UItemDefinition;
-inline FTimerHandle RespawnTimerHandle;
+
 
 UCLASS(BlueprintType, Blueprintable)
 class LOCAL_ADVENTUREGAME_API APickupBase : public AActor
@@ -17,6 +19,7 @@ class LOCAL_ADVENTUREGAME_API APickupBase : public AActor
 	GENERATED_BODY()
 	
 public:	
+	FTimerHandle RespawnTimerHandle;
 	// Sets default values for this actor's properties
 	APickupBase();
 	
@@ -25,6 +28,7 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	
 	UPROPERTY(EditInstanceOnly,Category="Pickup | Item Table")
 	FName PickupItemID;
@@ -63,5 +67,18 @@ public:
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+	
+protected:
+	UPROPERTY(ReplicatedUsing=OnRep_PickupAvailable)
+	bool bPickupAvailable=true;
+	
+	UFUNCTION()
+	void OnRep_PickupAvailable();
 
+	void ApplyPickupState();
+	
+	void RespawnPickup();
+	
+public:
+	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 };
