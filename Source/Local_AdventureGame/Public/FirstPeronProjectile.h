@@ -38,6 +38,13 @@ public:
 	//生命周期
 	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Projectile | Lifespan")
 	float ProjectileLifespan=5.f;
+	
+	//扣血
+	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Damage")
+    TSubclassOf<UDamageType>DamageType;
+	
+	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Damage")
+	float Damage;
 
 protected:
 	// Called when the game starts or when spawned
@@ -52,5 +59,7 @@ protected:
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+	
+	
 
 };

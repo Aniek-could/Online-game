@@ -113,6 +113,10 @@ AAdventureCharacter::AAdventureCharacter()
 	
 	    InventoryComponent=CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 	    check(InventoryComponent!=nullptr);
+	
+	MaxHealth=100.f;
+	CurrentHealth=MaxHealth;
+	bIsDead=false;
 }
 
 // Called when the game starts or when spawned
@@ -172,11 +176,11 @@ void AAdventureCharacter::Move(const FInputActionValue& Value)
 	
 	if (Controller)
 	{  
-		const FVector Right=GetActorRightVector();
-		AddMovementInput(Right,MovementValue.X);
-		
-		const FVector Forward=GetActorForwardVector();
-		AddMovementInput(Forward,MovementValue.Y);
+		const FRotator ControlRotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0.f, ControlRotation.Yaw, 0.f);
+
+		AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X), MovementValue.Y);
+		AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), MovementValue.X);
 	}
 }
 
@@ -285,5 +289,138 @@ void AAdventureCharacter::GetLifetimeReplicatedProps(TArray<class FLifetimePrope
 	
 	DOREPLIFETIME(AAdventureCharacter,CurrentTool);
 	DOREPLIFETIME(AAdventureCharacter,InventoryComponent);
+	DOREPLIFETIME(AAdventureCharacter,CurrentHealth);
+	DOREPLIFETIME(AAdventureCharacter,bIsDead);
 }
+
+void AAdventureCharacter::OnRep_CurrentHealth()
+{
+	OnHealthUpdate();
+}
+
+void AAdventureCharacter::OnHealthUpdate()
+{
+	if (IsLocallyControlled())
+	{
+		FString healthText = FString::Printf(TEXT("Health: %f"), CurrentHealth);
+		GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, healthText);
+	}
+}
+
+float AAdventureCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+                                      class AController* EventInstigator, AActor* DamageCauser)
+{
+	if (!HasAuthority()) return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+	
+	if (bIsDead) return 0.f;
+	
+	float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+	
+	float DamageApplied=CurrentHealth-ActualDamage;
+	SetCurrentHealth(DamageApplied);
+	
+	return ActualDamage;
+}
+
+void AAdventureCharacter::SetCurrentHealth(float healthValue)
+{
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		CurrentHealth=FMath::Clamp(healthValue,0.0f,MaxHealth);//调用复制函数
+		OnHealthUpdate();
+		
+		
+		if (CurrentHealth<=0.f&&!bIsDead)
+		{
+			Die();
+		}
+	}
+}
+
+void AAdventureCharacter::OnRep_IsDeadOrRevive()
+{
+	DecideWhetherToReviveOrDie();
+}
+
+void AAdventureCharacter::DecideWhetherToReviveOrDie()
+{
+	if (bIsDead)
+	{
+		MulticastHandleDeath();
+		if (IsLocallyControlled())
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, TEXT("您已死亡"));
+		}
+	}
+	else
+	{
+		MulticastHandleRespawn();
+		if (IsLocallyControlled())
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, TEXT("您已复活"));
+		}
+	}
+}
+
+void AAdventureCharacter::Die()
+{
+	if (!HasAuthority()||bIsDead) return;
+	
+	bIsDead=true;//同步整个客户端
+	
+	MulticastHandleDeath();
+	
+	if (IsLocallyControlled())
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, TEXT("您已死亡"));
+	}
+	
+	ForceNetUpdate();
+	
+}
+
+void AAdventureCharacter::MulticastHandleDeath_Implementation()
+{
+	UAnimInstance*AnimInst=GetMesh()->GetAnimInstance();
+	UAnimInstance*FirstPersonInst=FirstPersonMeshComponent->GetAnimInstance();
+	
+	if (AnimInst)
+	{
+		if (!AnimInst->Montage_IsPlaying(DeathMontage))
+		{
+			AnimInst->Montage_Play(DeathMontage);
+		}
+	}
+	
+	if (IsLocallyControlled()&&FirstPersonInst)
+	{
+		if (!FirstPersonInst->Montage_IsPlaying(DeathMontage))
+		{
+			FirstPersonInst->Montage_Play(DeathMontage);
+		}
+	}
+}
+
+
+void AAdventureCharacter::Revive()
+{
+	if (!HasAuthority()||!bIsDead) return;
+	
+	bIsDead=false;
+	
+	if (IsLocallyControlled())
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, TEXT("您已复活"));
+	}
+	
+	MulticastHandleRespawn();
+	ForceNetUpdate();
+}
+
+void AAdventureCharacter::MulticastHandleRespawn_Implementation()
+{
+}
+
+
+
 

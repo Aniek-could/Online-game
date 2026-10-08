@@ -7,6 +7,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 // Sets default values
 AFirstPeronProjectile::AFirstPeronProjectile()
@@ -50,6 +51,9 @@ AFirstPeronProjectile::AFirstPeronProjectile()
 	
 	//设置生命周期
 	InitialLifeSpan=ProjectileLifespan;
+	
+	Damage=10.f;
+	DamageType=UDamageType::StaticClass();
 }
 
 
@@ -68,6 +72,9 @@ void AFirstPeronProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherAct
 			HitCharacter->LaunchCharacter(LaunchVelocity,true,true);
 		}
 		
+		UGameplayStatics::ApplyPointDamage(OtherActor,Damage,NormalImpulse,Hit,GetInstigator()->Controller,this,DamageType);
+		
+		//服务端 Destroy() → 客户端自动移除
 		Destroy();
 		return;
 	}

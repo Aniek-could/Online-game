@@ -33,6 +33,8 @@ class LOCAL_ADVENTUREGAME_API AAdventureCharacter : public ACharacter
 {
 	GENERATED_BODY()
 	
+public:
+	AAdventureCharacter();
 protected:
 	
 	// 输入
@@ -54,8 +56,11 @@ protected:
 protected://动画
 	
 	//人物idle动画
-	UPROPERTY(EditAnywhere,Category=Animation)
+	UPROPERTY(EditAnywhere,Category="Animation")
 	UAnimBlueprint*FirstPersonDefaultAnim;
+	
+	UPROPERTY(EditAnywhere,Category="Animation")
+	UAnimMontage*DeathMontage;
 	
 protected://装备
 	
@@ -73,7 +78,7 @@ protected://装备
 
 public:
 	// Sets default values for this character's properties
-	AAdventureCharacter();
+	
 	
 	virtual void BeginPlay() override;
 	
@@ -137,6 +142,43 @@ public://复制
 	
 	//复制前提
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
-
 	
+public://血量
+	UPROPERTY(EditAnywhere,Category="Health")
+	float MaxHealth;
+	
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentHealth)
+	float CurrentHealth;
+	
+	UFUNCTION()
+	void OnRep_CurrentHealth();
+	
+	void OnHealthUpdate();
+	
+	UFUNCTION(BlueprintCallable,Category="Health")
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
+    UFUNCTION(BlueprintCallable,Category="Health")
+	void SetCurrentHealth(float healthValue);
+	
+	//是否死亡
+	UPROPERTY(ReplicatedUsing=OnRep_IsDeadOrRevive)
+	bool bIsDead;
+	
+	UFUNCTION()
+	void OnRep_IsDeadOrRevive();
+	
+	void DecideWhetherToReviveOrDie();
+	
+private:
+	
+	void Die();
+	
+	UFUNCTION(NetMulticast,Unreliable)//用于播放死亡音效等等
+	void MulticastHandleDeath();
+	
+	void Revive();
+	
+	UFUNCTION(NetMulticast,Unreliable)
+	void MulticastHandleRespawn();
 };
