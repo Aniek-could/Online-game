@@ -19,7 +19,10 @@
 #include "Logging/LogMacros.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "AdventureCharacter.generated.h"
+
 
 
 class UInputMappingContext;
@@ -181,4 +184,9 @@ private:
 	
 	UFUNCTION(NetMulticast,Unreliable)
 	void MulticastHandleRespawn();
+	
+	void Respawn();
+	
+protected://定时器
+	FTimerHandle RespawnTimerHandle;
 };

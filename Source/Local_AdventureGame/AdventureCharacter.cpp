@@ -172,6 +172,8 @@ void AAdventureCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 
 void AAdventureCharacter::Move(const FInputActionValue& Value)
 {
+	if (bIsDead) return;
+	
 	const FVector2D MovementValue=Value.Get<FVector2D>();
 	
 	if (Controller)
@@ -186,6 +188,8 @@ void AAdventureCharacter::Move(const FInputActionValue& Value)
 
 void AAdventureCharacter::Look(const FInputActionValue& Value)
 {
+	if (bIsDead) return;
+	
 	const FVector2D LookAxisValue=Value.Get<FVector2D>();
 	
 	if (Controller)
@@ -368,15 +372,21 @@ void AAdventureCharacter::Die()
 	
 	bIsDead=true;//同步整个客户端
 	
-	MulticastHandleDeath();
-	
-	if (IsLocallyControlled())
+	if (UCapsuleComponent*Capsule=GetCapsuleComponent())
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5, FColor::Green, TEXT("您已死亡"));
+		Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 	
-	ForceNetUpdate();
+	if (UCharacterMovementComponent*MovementComponent=GetCharacterMovement())
+	{
+		MovementComponent->DisableMovement();
+	}
 	
+	MulticastHandleDeath();
+	
+	GetWorldTimerManager().SetTimer(RespawnTimerHandle,this,&AAdventureCharacter::Respawn,5.f,false);
+	
+	ForceNetUpdate();
 }
 
 void AAdventureCharacter::MulticastHandleDeath_Implementation()
@@ -399,6 +409,12 @@ void AAdventureCharacter::MulticastHandleDeath_Implementation()
 			FirstPersonInst->Montage_Play(DeathMontage);
 		}
 	}
+	
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->DisableMovement();
+	}
+	
 }
 
 
@@ -417,8 +433,45 @@ void AAdventureCharacter::Revive()
 	ForceNetUpdate();
 }
 
+void AAdventureCharacter::Respawn()
+{
+	if (!HasAuthority()||!bIsDead) return;
+	
+	bIsDead=false;
+	CurrentHealth=MaxHealth;
+	
+	GetWorldTimerManager().ClearTimer(RespawnTimerHandle);
+	
+	MulticastHandleRespawn();
+	OnHealthUpdate();
+
+	ForceNetUpdate();
+}
+
 void AAdventureCharacter::MulticastHandleRespawn_Implementation()
 {
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+	
+	if (UCharacterMovementComponent*MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->SetMovementMode(MOVE_Walking);
+	}
+	
+	if (UAnimInstance*AnimInstance=GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->Montage_Stop(0.f,DeathMontage);
+	}
+	
+	if (FirstPersonMeshComponent)
+	{
+		if (UAnimInstance*FirstPersonInst=FirstPersonMeshComponent->GetAnimInstance())
+		{
+			FirstPersonInst->Montage_Stop(0.f,DeathMontage);
+		}
+	}
 }
 
 
