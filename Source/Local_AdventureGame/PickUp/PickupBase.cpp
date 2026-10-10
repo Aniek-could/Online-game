@@ -25,7 +25,7 @@ APickupBase::APickupBase()
 
 void APickupBase::InitializePickup()
 {
-	if (PickupDataTable.IsNull()&& PickupItemID.IsNone()) return;
+	if (PickupDataTable.IsNull() || PickupItemID.IsNone()) return;
 	
 	UDataTable*Table=PickupDataTable.LoadSynchronous();
 	if (!Table)
@@ -37,8 +37,8 @@ void APickupBase::InitializePickup()
 	}
 	
 	{
-		const FItemData*ItemDataRow=PickupDataTable->FindRow<FItemData>(PickupItemID,PickupItemID.ToString());
-		if (!ItemDataRow||!ItemDataRow->ItemBase) return ;
+		const FItemData*ItemDataRow=Table->FindRow<FItemData>(PickupItemID,PickupItemID.ToString());
+		if (!ItemDataRow || !IsValid(ItemDataRow->ItemBase.Get())) return;
 		
 		UItemDefinition*TempItemDefinition=ItemDataRow->ItemBase.Get();
 		
@@ -112,12 +112,40 @@ void APickupBase::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 	
 	const FName ChangedPropertyName= PropertyChangedEvent.Property?PropertyChangedEvent.Property->GetFName():NAME_None;
 
-	if (ChangedPropertyName==GET_ENUMERATOR_NAME_CHECKED(APickupBase,PickupItemID))
+	if (ChangedPropertyName == GET_MEMBER_NAME_CHECKED(APickupBase, PickupItemID) ||
+		ChangedPropertyName == GET_MEMBER_NAME_CHECKED(APickupBase, PickupDataTable))
 	{
-		if (const FItemData*ItemDataRow=PickupDataTable->FindRow<FItemData>(PickupItemID,PickupItemID.ToString()))
+		if (PickupItemID.IsNone())
 		{
-			UItemDefinition*TempItemDefinition=ItemDataRow->ItemBase;
-			PickupMeshComponent->SetStaticMesh(TempItemDefinition->WorldMesh.Get());
+			return;
+		}
+
+		UDataTable*Table=PickupDataTable.LoadSynchronous();
+		if (!IsValid(Table))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PickupDataTable is not assigned or could not be loaded for %s."),
+				*GetName());
+			return;
+		}
+
+		const FItemData*ItemDataRow=Table->FindRow<FItemData>(PickupItemID,PickupItemID.ToString());
+		if (!ItemDataRow || !IsValid(ItemDataRow->ItemBase.Get()))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Could not find a valid item row for '%s' in '%s'."),
+				*PickupItemID.ToString(), *Table->GetName());
+			return;
+		}
+
+		UItemDefinition*TempItemDefinition=ItemDataRow->ItemBase.Get();
+		UStaticMesh*WorldMesh=TempItemDefinition->WorldMesh.LoadSynchronous();
+
+		if (IsValid(PickupMeshComponent))
+		{
+			PickupMeshComponent->SetStaticMesh(WorldMesh);
+		}
+
+		if (IsValid(SphereComponent))
+		{
 			SphereComponent->SetSphereRadius(32.f);
 		}
 	}

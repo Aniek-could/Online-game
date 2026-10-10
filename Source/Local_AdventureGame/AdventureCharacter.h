@@ -147,10 +147,10 @@ public://复制
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
 	
 public://血量
-	UPROPERTY(EditAnywhere,Category="Health")
+	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,Category="Health")
 	float MaxHealth;
 	
-	UPROPERTY(ReplicatedUsing=OnRep_CurrentHealth)
+	UPROPERTY(VisibleAnywhere,BlueprintReadOnly,ReplicatedUsing=OnRep_CurrentHealth,Category="Health")
 	float CurrentHealth;
 	
 	UFUNCTION()
