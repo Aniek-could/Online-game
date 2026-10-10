@@ -47,6 +47,7 @@ struct  FItemData:public FTableRowBase//物品数据（id,类型，描述）
 	UPROPERTY(EditAnywhere, Category = "Item Data")
 	TObjectPtr<UItemDefinition>ItemBase;//让当前对象持有一个对 UItemDefinition 数据资产的强引用
 	
+	
 };
 
 class LOCAL_ADVENTUREGAME_API ItemData 

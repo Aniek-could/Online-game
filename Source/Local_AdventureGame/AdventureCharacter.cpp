@@ -2,6 +2,7 @@
 
 
 #include "AdventureCharacter.h"
+#include "Blueprint/UserWidget.h"
 
 void AAdventureCharacter::OnRep_CurrentTool()
 {
@@ -63,6 +64,11 @@ void AAdventureCharacter::ApplyCurrentTool()
 				CurrentTool->BindInputAction(UseAction);
 			}
 		}
+		
+		if (CurrentTool->CenterWidgetClass!=nullptr)
+		{
+			SetCenterWidgetClass(CurrentTool->CenterWidgetClass);
+		}
 	}
 }
 
@@ -117,6 +123,8 @@ AAdventureCharacter::AAdventureCharacter()
 	MaxHealth=100.f;
 	CurrentHealth=MaxHealth;
 	bIsDead=false;
+	
+	CenterWidgetClass=nullptr;
 }
 
 // Called when the game starts or when spawned
@@ -446,6 +454,33 @@ void AAdventureCharacter::Respawn()
 	OnHealthUpdate();
 
 	ForceNetUpdate();
+}
+
+void AAdventureCharacter::SetCenterWidgetClass(TSubclassOf<UUserWidget> NewWidgetClass)
+{
+	if (!NewWidgetClass)
+	{
+		return;
+	}
+	
+	if (IsValid(CenterWidgetInstance))
+	{
+		CenterWidgetInstance->RemoveFromParent();
+		CenterWidgetInstance = nullptr;
+	}
+	
+	CenterWidgetClass=NewWidgetClass;
+	
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	
+	if (!IsValid(PlayerController)) return;
+	
+	CenterWidgetInstance=CreateWidget<UUserWidget>(PlayerController,CenterWidgetClass);
+	
+	if (IsValid(CenterWidgetInstance))
+	{
+		CenterWidgetInstance->AddToViewport();
+	}
 }
 
 void AAdventureCharacter::MulticastHandleRespawn_Implementation()

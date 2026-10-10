@@ -46,6 +46,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TObjectPtr<UInputMappingContext>ToolMappingContext;
 	
+	//中心蓝图
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSubclassOf<UUserWidget>CenterWidgetClass;
+	
 	UFUNCTION()
 	virtual void Use();
 	

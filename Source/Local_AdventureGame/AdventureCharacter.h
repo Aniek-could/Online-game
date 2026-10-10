@@ -21,9 +21,8 @@
 #include "Engine/Engine.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "AdventureCharacter.generated.h"
-
-
 
 class UInputMappingContext;
 class UInputAction;
@@ -189,4 +188,13 @@ private:
 	
 protected://定时器
 	FTimerHandle RespawnTimerHandle;
+	
+public://蓝图
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	TSubclassOf<UUserWidget> CenterWidgetClass;
+
+	UPROPERTY()
+	TObjectPtr<UUserWidget> CenterWidgetInstance;
+
+	void SetCenterWidgetClass(TSubclassOf<UUserWidget> NewWidgetClass);
 };
