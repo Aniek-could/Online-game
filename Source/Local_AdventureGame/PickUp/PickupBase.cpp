@@ -3,6 +3,8 @@
 
 #include "PickUp/PickupBase.h"
 #include "Data/ItemDefinition.h"
+#include "UI/UI_ShootingBase.h"
+
 
 // Sets default values
 APickupBase::APickupBase()
@@ -55,31 +57,42 @@ void APickupBase::InitializePickup()
 			GEngine->AddOnScreenDebugMessage(-1,5.0f,FColor::Black,TEXT("未生成网格体"));
 		}
 		
-		//服务器绑定
-		if (HasAuthority())
-		{
-			//防止多次绑定
-			SphereComponent->OnComponentBeginOverlap.RemoveDynamic(this,&APickupBase::OnSphereBeginOverlap);
-			SphereComponent->OnComponentBeginOverlap.AddDynamic(this,&APickupBase::OnSphereBeginOverlap);
-		}
-		
 		ApplyPickupState();
 	}
 		
 }
+
 
 // Called when the game starts or when spawned
 void APickupBase::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	//服务器绑定
+	if (HasAuthority())
+	{
+		//防止多次绑定
+		SphereComponent->OnComponentBeginOverlap.RemoveDynamic(this,&APickupBase::OnSphereBeginOverlap);
+		SphereComponent->OnComponentBeginOverlap.AddDynamic(this,&APickupBase::OnSphereBeginOverlap);
+			
+		SphereComponent->OnComponentEndOverlap.RemoveDynamic(this, &APickupBase::OnSphereEndOverlap);
+		SphereComponent->OnComponentEndOverlap.AddDynamic(this, &APickupBase::OnSphereEndOverlap);
+	}
+	
 	InitializePickup();
 }
+
 
 void APickupBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearTimer(RespawnTimerHandle);
 	Super::EndPlay(EndPlayReason);
+	
+	for (const TPair<TWeakObjectPtr<AAdventureCharacter>, TObjectPtr<UUI_ShootingBase>>& Pair : PickupWidgetMap)
+	{
+		if (IsValid(Pair.Value)) Pair.Value->RemoveFromParent();
+	}
+	PickupWidgetMap.Empty();
 }
 
 void APickupBase::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
@@ -87,19 +100,106 @@ void APickupBase::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent,
 {
 	if (!HasAuthority()) return;
 	if (!bPickupAvailable) return;
-    
+	
 	AAdventureCharacter*Character=Cast<AAdventureCharacter>(OtherActor);
-	if (!IsValid(Character)||!IsValid(ReferenceItem)) return;
-		
-	if (Character->GiveItem(ReferenceItem))
+	if (!IsValid(Character)) return;
+	
+	//添加进来的成员
+	if (OverlappingCharacters.Contains(Character)) return;
+	OverlappingCharacters.Add(Character);
+	
+	if (!PickupWidgetClass) return;
+	
+	const FText ItemName=IsValid(ReferenceItem)?ReferenceItem->ItemText.Name:FText::GetEmpty();
+	const FText ItemDesc=IsValid(ReferenceItem)?ReferenceItem->ItemText.Description:FText::GetEmpty();
+	Character->ClientShowPickupUI(this,ItemName,ItemDesc);	
+}
+
+void APickupBase::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (!HasAuthority()) return;
+	
+	AAdventureCharacter*Character=Cast<AAdventureCharacter>(OtherActor);
+	if (!IsValid(Character)) return;
+	
+	OverlappingCharacters.Remove(Character);
+	Character->ClientHidePickupUI(this);
+}
+
+void APickupBase::HandlePickUpButtonClicked(AAdventureCharacter* TargetCharacter)
+{
+	if (!HasAuthority()||!bPickupAvailable) return;
+	if (!IsValid(TargetCharacter)||!IsValid(ReferenceItem)) return;
+	if (!OverlappingCharacters.Contains(TargetCharacter)) return;
+	
+	if (TargetCharacter->GiveItem(ReferenceItem))
 	{
 		bPickupAvailable=false;
-		ApplyPickupState();
-		ForceNetUpdate();
-		
-		if (bShouldReSpawn)
+		//TWeakObjectPtr<T> 是 UE 里针对 UObject 体系的弱引用指针：它能安全地“观察”一个对象，但不会阻止这个对象被 GC 回收；对象销毁后，IsValid() 会变成 false。
+		for (const TWeakObjectPtr<AAdventureCharacter>&W:OverlappingCharacters)
 		{
-			GetWorldTimerManager().SetTimer(RespawnTimerHandle,this,&APickupBase::RespawnPickup,ReSpawnTime,false);
+			//W.Get() 从弱引用里取出原始指针 AAdventureCharacter*
+			if (AAdventureCharacter*C=W.Get()) C->ClientHidePickupUI(this);
+			
+		}
+		OverlappingCharacters.Empty();
+		
+			ApplyPickupState();
+			ForceNetUpdate();
+			
+			if (bShouldReSpawn)
+			{
+				GetWorldTimerManager().SetTimer(RespawnTimerHandle, this, &APickupBase::RespawnPickup, ReSpawnTime, false);
+			}
+	}
+}
+
+void APickupBase::ShowPickupUIFor(AAdventureCharacter* TargetCharacter, const FText& ItemName, const FText& ItemDesc)
+{
+	if (!IsValid(TargetCharacter)||!PickupWidgetClass) return;
+	
+	APlayerController*PC=Cast<APlayerController>(TargetCharacter->GetController());
+	if (!IsValid(PC)||!PC->IsLocalController()) return;
+	
+	TargetCharacter->AddInteractablePickup(this);
+	
+	PC->SetShowMouseCursor(false);
+	PC->SetInputMode(FInputModeGameOnly());
+	
+	if (PickupWidgetMap.Contains(TargetCharacter)) return;
+	
+	UUI_ShootingBase*WidgetInstance=CreateWidget<UUI_ShootingBase>(PC,PickupWidgetClass);
+	if (!IsValid(WidgetInstance)) return;
+	
+	WidgetInstance->InitPickupWidget(TargetCharacter,this,ItemName,ItemDesc);
+	WidgetInstance->AddToViewport();
+	
+	
+	PickupWidgetMap.Add(TargetCharacter,WidgetInstance);
+}
+
+void APickupBase::HidePickupUIFor(AAdventureCharacter* TargetCharacter)
+{
+	if (!IsValid(TargetCharacter)) return;
+	
+	UUI_ShootingBase*Widget=nullptr;
+	if (TObjectPtr<UUI_ShootingBase>*Found=PickupWidgetMap.Find(TargetCharacter))
+	{
+		//所以要用 ->Get() 把 TObjectPtr<UUI_ShootingBase> 转成普通指针 UUI_ShootingBase*，然后赋给 Widget。
+		Widget=Found->Get();
+	}
+	PickupWidgetMap.Remove(TargetCharacter);
+	TargetCharacter->RemoveInteractablePickup(this);
+	
+	if (IsValid(Widget)) Widget->RemoveFromParent();
+	
+	if (APlayerController* PC = Cast<APlayerController>(TargetCharacter->GetController()))
+	{
+		if (PC->IsLocalController())
+		{
+			PC->SetShowMouseCursor(false);
+			PC->SetInputMode(FInputModeGameOnly());
 		}
 	}
 }

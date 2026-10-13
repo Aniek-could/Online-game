@@ -3,6 +3,33 @@
 
 #include "AdventureCharacter.h"
 #include "Blueprint/UserWidget.h"
+#include "PickUp/PickupBase.h"
+
+void AAdventureCharacter::AddInteractablePickup(APickupBase* Pickup)
+{
+	if (InteractablePickups.Contains(Pickup)) return;
+	InteractablePickups.Add(Pickup);
+}
+
+void AAdventureCharacter::RemoveInteractablePickup(APickupBase* Pickup)
+{
+	if (!InteractablePickups.Contains(Pickup)) return;
+	InteractablePickups.Remove(Pickup);
+}
+
+void AAdventureCharacter::OnPickupPressed()
+{
+	if (bIsDead) return;
+	
+	for (const TWeakObjectPtr<APickupBase>&Weak:InteractablePickups)
+	{
+		 if (APickupBase*P=Weak.Get())
+		 {
+			 ServerRequestPickup(P);
+		 	 return;
+		 }
+	}
+}
 
 void AAdventureCharacter::OnRep_CurrentTool()
 {
@@ -70,6 +97,20 @@ void AAdventureCharacter::ApplyCurrentTool()
 			SetCenterWidgetClass(CurrentTool->CenterWidgetClass);
 		}
 	}
+}
+
+void AAdventureCharacter::ClientShowPickupUI_Implementation(APickupBase* Pickup, const FText& ItemName,
+	const FText& ItemDesc)
+{
+	if (IsValid(Pickup))
+	{
+		Pickup->ShowPickupUIFor(this,ItemName,ItemDesc);
+	}
+}
+
+void AAdventureCharacter::ServerRequestPickup_Implementation(APickupBase* Pickup)
+{
+	if (IsValid(Pickup)) Pickup->HandlePickUpButtonClicked(this);
 }
 
 // Sets default values
@@ -175,6 +216,7 @@ void AAdventureCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 		
 		EnhancedInputComponent->BindAction(JumpAction,ETriggerEvent::Started,this,&ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction,ETriggerEvent::Completed,this,&ACharacter::StopJumping);
+		EnhancedInputComponent->BindAction(PickupAction, ETriggerEvent::Started, this, &AAdventureCharacter::OnPickupPressed);
 	}
 }
 
@@ -481,6 +523,11 @@ void AAdventureCharacter::SetCenterWidgetClass(TSubclassOf<UUserWidget> NewWidge
 	{
 		CenterWidgetInstance->AddToViewport();
 	}
+}
+
+void AAdventureCharacter::ClientHidePickupUI_Implementation(APickupBase* Pickup)
+{
+	if (IsValid(Pickup)) Pickup->HidePickupUIFor(this);
 }
 
 void AAdventureCharacter::MulticastHandleRespawn_Implementation()

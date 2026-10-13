@@ -28,6 +28,7 @@ class UInputMappingContext;
 class UInputAction;
 class UEnhancedInputComponent;
 class UAnimBlueprint;
+class APickupBase;
 
 
 UCLASS()
@@ -54,6 +55,19 @@ protected:
 	
 	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category=Input)
 	TObjectPtr<UInputAction>UseAction;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Input)
+	TObjectPtr<UInputAction> PickupAction;
+	
+public://交互
+	void AddInteractablePickup(APickupBase*Pickup);   // UI 出现时由拾取物调用
+	void RemoveInteractablePickup(APickupBase*Pickup);   // UI 消失时调用
+	
+protected://交互
+	
+	TSet<TWeakObjectPtr<APickupBase>>InteractablePickups;
+	
+	void OnPickupPressed();
 	
 protected://动画
 	
@@ -197,4 +211,10 @@ public://蓝图
 	TObjectPtr<UUserWidget> CenterWidgetInstance;
 
 	void SetCenterWidgetClass(TSubclassOf<UUserWidget> NewWidgetClass);
+	
+public://装备拾取
+public:
+	UFUNCTION(Client, Reliable) void ClientShowPickupUI(APickupBase* Pickup, const FText& ItemName, const FText& ItemDesc);
+	UFUNCTION(Client, Reliable) void ClientHidePickupUI(APickupBase* Pickup);
+	UFUNCTION(Server, Reliable) void ServerRequestPickup(APickupBase* Pickup);
 };

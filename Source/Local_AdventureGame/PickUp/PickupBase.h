@@ -8,9 +8,11 @@
 #include "AdventureCharacter.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "Components/Button.h"
 #include "PickupBase.generated.h"
 
 class UItemDefinition;
+class UUI_ShootingBase;
 
 
 UCLASS(BlueprintType, Blueprintable)
@@ -25,6 +27,21 @@ public:
 	
 	void InitializePickup();
 
+	//拾取蓝图
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Pickup | UI")
+	TSubclassOf<UUI_ShootingBase>PickupWidgetClass;
+	
+	TSet<TWeakObjectPtr<AAdventureCharacter>>OverlappingCharacters;
+	
+	UPROPERTY()
+	TMap<TWeakObjectPtr<AAdventureCharacter>,TObjectPtr<UUI_ShootingBase>>PickupWidgetMap;
+	
+	void HandlePickUpButtonClicked(AAdventureCharacter* TargetCharacter);
+	
+	void ShowPickupUIFor(AAdventureCharacter* TargetCharacter, const FText& ItemName, const FText& ItemDesc);
+
+	void HidePickupUIFor(AAdventureCharacter* TargetCharacter);
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -49,6 +66,9 @@ protected:
 	
 	UFUNCTION(BlueprintCallable,Category="Pickup | Item Table")
 	void OnSphereBeginOverlap(UPrimitiveComponent*OverlappedComponent,AActor*OtherActor,UPrimitiveComponent*OtherComp,int32 OtherBoxIndex,bool bFromSweep,const FHitResult& SweepResult);
+	
+	UFUNCTION()
+	void OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 	
 	//重新生成
 	UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="Pickup | ReSpawn")

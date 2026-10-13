@@ -41,3 +41,8 @@ Desktop.ini
 # Unreal autosaves and local metadata
 *_BuiltData.uasset
 *.tmp
+
+# ---- Unused Fab demo character (~863MB): keep locally, never commit ----
+/Content/QuantumCharacter/
+/Content/__ExternalActors__/QuantumCharacter/
+/Content/__ExternalObjects__/QuantumCharacter/
